@@ -87,8 +87,10 @@ def create_network():
 
     return G
 
-N_sims = 100000
-N = 1000
+N_sims = 1000 # Number of simulations
+N = 100000 # Number of individuals
+
+delta = 0.9 # Discount factor
 
 k_min = 5    # min degree
 k_max = 100  # max degree
@@ -159,7 +161,7 @@ def simulate():
         
         # Update social activity
         for i in effective_nodes:
-            G.a[i] = 1 / (1 + beta*G.theta[i]*alpha)
+            G.a[i] = 1 / (1 + beta*G.theta[i]*delta*alpha)
         
         infected_add  = set() # Will be added to infected
         effective_add = set() # Will be added to effective
