@@ -11,12 +11,12 @@ The following will refer to the random network case. The scale-free network case
 git clone https://github.com/lorenzoamir/EpiNetworkPaper.git
 ```
 
-2. Move to working directory:\\
+2. Move to working directory:
 ```
 cd EpiNetworkPaper/Scripts/RandomNetwork`
 ```
 
-3 Run simulations:
+3. Run simulations:
 ```
 python NetworkEpiScript.py -i 0. 
 python NetworkEpiScript.py -i 0.1 
@@ -40,3 +40,14 @@ python NetworkEpiScript.py -i 48.
 python NetworkEpiScript.py -i 69. 
 python NetworkEpiScript.py -i 100.
 ```
+4. Create data directory:
+```
+mkdir ../../Data/RandomNetworkData/
+```
+
+5. Move results:
+```
+mv -r output/ ../../Data/RandomNetworkData/
+```
+
+To visualize results run the notebook `EpiNetworkPaper/Notebooks/EpiNetworkNotebook.ipynb`
