@@ -13,7 +13,7 @@ git clone https://github.com/lorenzoamir/EpiNetworkPaper.git
 
 2. Move to working directory:
 ```
-cd EpiNetworkPaper/Scripts/RandomNetwork`
+cd EpiNetworkPaper/Scripts/RandomNetwork
 ```
 
 3. Run simulations:
