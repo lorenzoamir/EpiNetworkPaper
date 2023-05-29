@@ -85,15 +85,20 @@ def create_network():
     #we need to store the social activity of each node
     G.a={} #S=0, I=1, R=-1
 
+    # We need to store the probability of being S for each node
+    G.s={}
+
     return G
 
-N_sims = 1000 # Number of simulations
-N = 100000 # Number of individuals
+dt = 0.1
 
-delta = 0.9 # Discount factor
+N_sims = 1000 # Number of simulations 1000
+N = 10000 # Number of individuals 1e4 
+
+delta = np.exp(-dt/10) # Discount factor
 
 k_min = 5    # min degree
-k_max = 100  # max degree
+k_max = int(N**(0.5)) # max degree
 gamma = 2.1  # power law exponent p_k = C*k^{-gamma}
 
 # BEHAVIOUR PARAMETERS
@@ -102,19 +107,14 @@ alpha = read_arguments(sys.argv)
 
 # BIOLOGICAL PARAMETERS
 
-mu = 0.1  # Recovery rate
-beta_default = 0.3 # Transmission rate per single contact
+mu = dt / 10.  # Recovery rate
+beta_default = 3 * mu # Transmission rate per single contact
 
 # CODE PARAMETERS
 
 i0 = 0.01 # Fraction of initial infected nodes
 # frac = 10/N # Only keep runs where the disease reaches this fraction of the population
-t_max = 1000 # Max length of a simulation
-
-# In[5]:
-
-# In[6]:
-
+t_max = round(1000/dt) # Max length of a simulation
 
 def simulate():
     # Simulates the epidemic. The change in social activity is only computed for infected nodes and
@@ -158,10 +158,11 @@ def simulate():
         # Update theta
         for i in effective_nodes:
             G.theta[i] = sum([G.a[j] if G.disease_status[j] == "i" else 0 for j in G.neighbors(i)])
+            G.s[i]     = sum([1      if G.disease_status[j] == "s" else 0 for j in G.neighbors(i)])/G.degree[i]
         
         # Update social activity
         for i in effective_nodes:
-            G.a[i] = 1 / (1 + beta*G.theta[i]*delta*alpha)
+            G.a[i] = 1 / (1 + G.s[i]*beta*G.theta[i]*delta*(alpha/dt))
         
         infected_add  = set() # Will be added to infected
         effective_add = set() # Will be added to effective
@@ -227,10 +228,6 @@ def simulate():
     tt = np.linspace(0, t_max, t_max+1)
     
     return tt, result
-
-
-# In[7]:
-
 
 # Let's create a matrix "sims_matrix" with N_sims rows and t_max columns,
 # each row represents the time-series of a single simulation

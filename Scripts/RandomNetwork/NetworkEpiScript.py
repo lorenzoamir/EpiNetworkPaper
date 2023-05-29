@@ -29,16 +29,16 @@ def read_arguments(argv):
             arg_alpha = float(arg)
             return arg_alpha
 
-# In[2]:
+dt = 0.1
 
-N_sims = 1000 # Number of simulations
-N = 100000 # Number of individuals
+N_sims = 1000 # Number of simulation
+N = 10000 # Number of individuals
 
-delta = 0.9 # Discount factor
+delta = np.exp(-dt/10) # Discount factor
 
 # Build the network 
 
-prob = 17.38/N # 17.38 is the average degree
+prob = 14.7/N # 14.7 is the average degree
 
 # BEHAVIOUR PARAMETERS
 
@@ -46,18 +46,14 @@ alpha = read_arguments(sys.argv)
 
 # BIOLOGICAL PARAMETERS
 
-mu = 0.1  # Recovery rate
-beta_default = 0.3 # Transmission rate
+mu = dt / 10.  # Recovery rate
+beta_default = 3 * mu # Transmission rate
 
 # CODE PARAMETERS
 
 i0 = 0.01 # Fraction of initial infected nodes
 # frac = 10/N # Only keep runs where the disease reaches this fraction of the population
-t_max = 1000 # Max length of a simulation
-
-# In[5]:
-
-# In[6]:
+t_max = round(1000/dt) # Max length of a simulation
 
 def simulate():
     # Simulates the epidemic. The change in social activity is only computed for infected nodes and
@@ -80,6 +76,9 @@ def simulate():
 
     # We need to store the social activity of each node
     G.a={}
+
+    # We need to store the probability of being S for each node
+    G.s={}
     
     for i in G:
         # Set social activity to 1 and nodes to their initial status
@@ -115,10 +114,11 @@ def simulate():
         # Update theta
         for i in effective_nodes:
             G.theta[i] = sum([G.a[j] if G.disease_status[j] == "i" else 0 for j in G.neighbors(i)])
+            G.s[i]     = sum([1      if G.disease_status[j] == "s" else 0 for j in G.neighbors(i)])/G.degree[i]
         
         # Update social activity
         for i in effective_nodes:
-            G.a[i] = 1 / (1 + beta*G.theta[i]*delta*alpha)
+            G.a[i] = 1 / (1 + G.s[i]*beta*G.theta[i]*delta*(alpha/dt))
         
         infected_add  = set() # Will be added to infected
         effective_add = set() # Will be added to effective
@@ -184,10 +184,6 @@ def simulate():
     tt = np.linspace(0, t_max, t_max+1)
     
     return tt, result
-
-
-# In[7]:
-
 
 # Let's create a matrix "sims_matrix" with N_sims rows and t_max columns,
 # each row represents the time-series of a single simulation
