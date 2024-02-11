@@ -10,8 +10,6 @@ import numpy as np
 import networkx as nx
 import random
 
-# RANDOM NETWORK
-
 def read_arguments(argv):
     arg_alpha = ""
     arg_help = "{0} -i <input> \n The input is the value of the parameter alpha".format(argv[0])
@@ -32,10 +30,9 @@ def read_arguments(argv):
             return arg_alpha
 
 dt = 1
-a_steps = 10 # Number of social activity upgrades at each time step
 
-N_sims = 1000 # Number of simulation
-N = 10000 # Number of individuals
+N_sims = 100 # Number of simulation
+N = 1000 # Number of individuals
 
 delta = np.exp(-dt/10) # Discount factor
 
@@ -119,15 +116,13 @@ def simulate():
         
         # Update theta
         for i in effective_nodes:
+            G.theta[i] = sum([G.a[j] for j in G.neighbors(i)])
             G.s[i]     = sum([1 if G.disease_status[j] == "s" else 0 for j in G.neighbors(i)])/G.degree[i]
             G.i[i]     = sum([1 if G.disease_status[j] == "i" else 0 for j in G.neighbors(i)])/G.degree[i]
 
-        # Update social activity a_step times to reach equilibrium
-        for _ in range(a_steps):
-          for i in effective_nodes: # Aggregate social activity to react to
-                G.theta[i] = sum([G.a[j] for j in G.neighbors(i)])
-          for i in effective_nodes: # Update all social activities
-                G.a[i] = 1 / (1 + G.s[i]*G.i[i]*beta*G.theta[i]*delta*(alpha/dt))
+        # Update social activity
+        for i in effective_nodes:
+            G.a[i] = 1 / (1 + G.s[i]*G.i[i]*beta*G.theta[i]*delta*(alpha/dt))
         
         infected_add  = set() # Will be added to infected
         effective_add = set() # Will be added to effective
@@ -194,28 +189,25 @@ def simulate():
     
     return tt, result
 
-# Let's create a matrix "sims_matrix" with N_sims rows and t_max columns,
-# each row represents the time-series of a single simulation
 
-sims_matrix = np.zeros((N_sims, t_max+1))
+r_matrix = np.zeros((N_sims, t_max+1))
 
 N_keep = 0 # Number of runs in which i is over the threshold
 r_inf = []  # Final attack rates list
 
-for i, row in enumerate(sims_matrix):
+for i, row in enumerate(r_matrix):
     tt, result = simulate()
 
 #    if(result["r"][-1] >= frac): # Only keep runs where the desease reaches a significant fraction of the pupulation
-    row[:] = result["i"][:]
+    row[:] = result["r"][:]
     r_inf.append(result["r"][-1])
 
 r_inf = np.array(r_inf) # From list to np.array
 
-path = "output/" + ("alpha={}/".format(alpha))
+path = "single_sim/" + ("alpha={}/".format(alpha))
 
 if not os.path.exists(path):
     os.makedirs(path)
 
-np.save(path + "simulations", sims_matrix)
-np.save(path + "r_inf", r_inf)
+np.save(path + "r_t", r_matrix)
 

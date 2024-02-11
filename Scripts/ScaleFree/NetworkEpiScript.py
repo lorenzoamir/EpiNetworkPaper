@@ -88,9 +88,13 @@ def create_network():
     # We need to store the probability of being S for each node
     G.s={}
 
+    # Local prevalence (rho in the paper)
+    G.i={}
+
     return G
 
-dt = 0.1
+dt = 1
+a_steps = 10 # Number of social activity upgrades at each time step
 
 N_sims = 1000 # Number of simulations 1000
 N = 10000 # Number of individuals 1e4 
@@ -157,12 +161,15 @@ def simulate():
         
         # Update theta
         for i in effective_nodes:
-            G.theta[i] = sum([G.a[j] if G.disease_status[j] == "i" else 0 for j in G.neighbors(i)])
-            G.s[i]     = sum([1      if G.disease_status[j] == "s" else 0 for j in G.neighbors(i)])/G.degree[i]
+            G.s[i]     = sum([1 if G.disease_status[j] == "s" else 0 for j in G.neighbors(i)])/G.degree[i]
+            G.i[i]     = sum([1 if G.disease_status[j] == "i" else 0 for j in G.neighbors(i)])/G.degree[i]
         
-        # Update social activity
-        for i in effective_nodes:
-            G.a[i] = 1 / (1 + G.s[i]*beta*G.theta[i]*delta*(alpha/dt))
+        # Update social activity a_step times to reach equilibrium
+        for _ in range(a_steps):
+          for i in effective_nodes: # Aggregate social activity to react to
+                G.theta[i] = sum([G.a[j] for j in G.neighbors(i)])
+          for i in effective_nodes: # Update all social activities
+                G.a[i] = 1 / (1 + G.s[i]*G.i[i]*beta*G.theta[i]*delta*(alpha/dt))
         
         infected_add  = set() # Will be added to infected
         effective_add = set() # Will be added to effective
@@ -245,9 +252,6 @@ for i, row in enumerate(sims_matrix):
     r_inf.append(result["r"][-1])
 
 r_inf = np.array(r_inf) # From list to np.array
-
-# We are keeping rows for which it's false that all elements are 0 using the complement operator "~"
-# sims_matrix = sims_matrix[~np.all(sims_matrix == 0, axis=1)]
 
 path = "output/" + ("alpha={}/".format(alpha))
 
