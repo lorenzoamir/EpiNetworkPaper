@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import os
-from epieconlib import create_scalefree, simulate_sir
+from epieconlib import create_scalefree, simulate_sis
 import sys
 import argparse
 import numpy as np
@@ -11,7 +11,7 @@ import random
 from scipy.sparse import triu
 
 # PARSE ARGUMENTS
-parser = argparse.ArgumentParser(description='Run SIR simulations on a scale-free network')
+parser = argparse.ArgumentParser(description='Run SIS simulations on a random network')
 parser.add_argument('--alpha', type=float, help='Cost of infection', required=True)
 parser.add_argument('--outdir', type=str, help='Output directory', default='.')
 parser.add_argument('--beta', type=float, help='Transmission rate assuming dt = 1 day (automatically adjusted if dt!=1)', default=0.3)
@@ -57,12 +57,11 @@ t_max = round(args.tmax/dt) # Max length of a simulation
 sims_matrix = np.zeros((N_sims, t_max+1))
 
 N_keep = 0 # Number of runs in which i is over the threshold
-r_inf = []  # Final attack rates list
-
+i_inf = [] # Endemic fraction of infected nodes
 for i, row in enumerate(sims_matrix):
     G = create_scalefree(N, k_min, k_max, gamma, seed=args.seed+i)
 
-    tt, result = simulate_sir(
+    tt, result = simulate_sis(
         G,
         i0,
         t_max,
@@ -75,9 +74,11 @@ for i, row in enumerate(sims_matrix):
 
 #    if(result["r"][-1] >= frac): # Only keep runs where the desease reaches a significant fraction of the pupulation
     row[:] = result["i"][:]
-    r_inf.append(result["r"][-1])
+    #r_inf.append(result["r"][-1])
+    i_inf.append(result["i"][-1])
 
-r_inf = np.array(r_inf) # From list to np.array
+#r_inf = np.array(r_inf) # From list to np.array
+i_inf = np.array(i_inf)
 
 # Create output directory if it does not exist
 path = os.path.join(args.outdir, "alpha={}/".format(alpha))
@@ -87,4 +88,4 @@ if not os.path.exists(path):
     os.makedirs(path)
 
 np.save(path + "simulations", sims_matrix)
-np.save(path + "r_inf", r_inf)
+np.save(path + "i_inf", i_inf)

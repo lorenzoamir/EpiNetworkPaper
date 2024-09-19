@@ -2,7 +2,8 @@
 
 RANDOM_SIR=1
 RANDOM_SIS=0
-SCALEFREE_SIR=1
+
+SCALEFREE_SIR=0
 SCALEFREE_SIS=0
 
 # Parameters
@@ -13,8 +14,8 @@ i0=0.01
 planninghorizon=10
 dt=1
 activitysteps=10
-nsims=100
-nindividuals=1000
+nsims=1000
+nindividuals=10000
 tmax=1000
 seed=42
 
