@@ -635,3 +635,126 @@ def simulate_sis(G, i0, t_max, beta_default, mu, alpha=0, delta=0.9, seed=42, N_
         
     return tt, result
 
+def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, seed, N_steps):
+    '''
+    Simulate the SIRD model on a network
+
+    Parameters:
+    G: NetworkX graph
+        The network on which to simulate the model
+    i0: float
+        Initial fraction of infected nodes
+    t_max: int
+        Maximum time
+    beta_default: float
+        Infection rate
+    pi: float   
+        Fatality rate
+    mu: float
+        Recovery rate
+    alpha: float
+        Cost of infection
+    delta: float
+        Discount factor
+    seed: int
+        Random seed
+    N_steps: int
+        Number of steps to update social activity
+    '''
+    
+    N = len(G.nodes)
+    k = np.array(G.degree)[:,1]
+
+    k_ave = 2*len(G.edges)/N
+    beta = beta_default/k_ave
+
+    # Init all nodes to S
+    disease_status=np.array(["s"] * N)
+
+    # Select i0*N nodes to be infected
+    i_set = set(random.sample(range(0,N), max(1, round(N * i0))))
+    r_set = set()
+
+    # Init social activity (a) to 1
+    a = np.ones(N)
+
+    # non-zero elements are links, (symmetric)
+    
+    # All links (each link appears twice)
+    all_links = np.array(nx.adjacency_matrix(G).nonzero()).T # 
+
+    # only use the upper triangle (diagonal excluded)
+    links_no_dupl = np.array(triu(nx.adjacency_matrix(G)).nonzero()).T
+
+    result = {
+        "s": [(N - len(i_set)) / N],
+        "i": [len(i_set)/N],
+        "r": [0],
+        "d": [0]
+        }
+
+    for t in range(t_max):
+
+        i_new = set()
+        r_new = set()
+
+        i_tuple = tuple(i_set)
+        r_tuple = tuple(r_set)
+
+        prev = get_prev_i(all_links, i_tuple, k) # prevalence
+        sigma = get_prev_s(all_links, i_tuple, r_tuple, k) # prob of being S
+
+        for _ in range(N_steps):
+            avg_a = get_avg_a(all_links, a, k) # avg social activity
+            a = 1 / (1 + alpha * delta * beta_default * sigma * prev * avg_a)
+
+        # Remove links in which at least one node is recovered
+        active_links = links_no_dupl[~np.isin(links_no_dupl, r_tuple).any(axis=1)]
+        # Subset to links where only one node is infected
+        active_links = active_links[np.sum(np.isin(active_links, i_tuple), axis=1) == 1]
+
+        # Generate random numbers for each active link
+        rand = np.random.rand(len(active_links))
+
+        # save new infections
+        i_thr = beta*a[active_links[:,0]] * a[active_links[:,1]]
+
+        i_new = set(np.unique(active_links[rand < i_thr])) - i_set
+
+        # Extract number of recoveries from a binomial distribution
+        n_recoveries = np.random.binomial(len(i_set), mu)
+        # Extract number of deaths from a binomial distribution
+        n_deaths = np.random.binomial(n_recoveries, pi)
+
+        # Randomly select indices of nodes to recover
+        rand = np.random.choice(len(i_set), n_recoveries, replace=False)
+
+        r_new = set([i_tuple[i] for i in rand])
+
+        # add new infections to infected nodes
+        if i_new:
+            i_set = i_set | i_new
+
+        if r_new:
+            # remove recoveries from infected nodes
+            i_set = i_set - r_new
+            # add new recoveries to recovered nodes
+            r_set = r_set | r_new
+
+        result["s"].append((N - len(i_set) - len(r_set)) / N)
+        result["i"].append(len(i_set) / N)
+        result["r"].append(len(r_set) / N)
+        result["d"].append(result["d"][-1] + n_deaths / N)
+
+        if len(i_set) == 0:
+                # Repeat the last value of s, i and r until the end if the epidemics ends before tmax
+                result["s"] = np.pad(result["s"], [(0, t_max+1-len(result["s"]))], mode='edge')
+                result["i"] = np.pad(result["i"], [(0, t_max+1-len(result["i"]))], mode='constant') # pad 0
+                result["r"] = np.pad(result["r"], [(0, t_max+1-len(result["r"]))], mode='edge')
+                result["d"] = np.pad(result["d"], [(0, t_max+1-len(result["d"]))], mode='edge')
+
+                break 
+        
+    tt = np.linspace(0, t_max, t_max+1)
+        
+    return tt, result
