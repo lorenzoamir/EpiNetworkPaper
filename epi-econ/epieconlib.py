@@ -4,6 +4,7 @@ import random
 from scipy.sparse import triu
 
 # ----- NETWORK CRATION -----
+
 def create_random_connected(N, prob, seed=0):
     """
     Create a random connected network with N nodes and a given probability of connection
@@ -91,6 +92,256 @@ def get_activity(k_min, k_max, gamma):
     a = ( (k_max**e - k_min**e)*y + k_min**e )**(1./e)
     
     return a
+
+def create_annealed_network(k_min, k_max, gamma):
+    # (Annealed) scale-free network generation
+
+    degrees = np.arange(k_min, k_max+1, 1)
+
+    p = {}
+
+    for k in degrees:
+        p[k] = np.array(k**(-gamma))
+
+    norm = sum([p[k] for k in degrees])
+
+    for k in degrees:
+        p[k] /= norm #normalize p_k
+
+    return degrees, p
+
+# ----- GLOBAL AWARENESS -----
+
+def step_MF_sir(Y, beta, mu, a):
+    # s = 1 - Y[0] -Y[1]
+    # i = Y[0]
+    # r = Y[1]
+
+    di = beta*(1 - Y[0] - Y[1])*a*a*Y[0]
+    dr = Y[0]*mu
+
+    i_new = Y[0] + di - dr
+    r_new = Y[1] + dr
+
+    return np.array([i_new, r_new])
+
+def step_MF_sis(Y, beta, mu, a):
+    # s = 1 - Y[0] -Y[1]
+    # i = Y[0]
+
+    di = beta*(1 - Y[0] - Y[1])*a*a*Y[0]
+    ds = mu*Y[0]
+
+    i_new = Y[0] + di - ds
+
+    return np.array([i_new, 0])
+
+def simulate_MF(model, t_max, beta, mu, alpha, delta, i0, a_steps=10, dt=1, zero_tol=1e-9):
+    '''
+    Simulate the mean field model
+
+    Parameters:
+        model: Model to simulate, must be sir or sis
+        t_max: Maximum time
+        beta: Infection rate
+        mu: Recovery rate
+        alpha: Cost of infection
+        delta: Discount factor
+        i0: Initial fraction of infected individuals
+        dt: Time step
+        a_steps: Number of steps to update social activity
+        zero_tol: Tolerance for zero values
+    '''
+
+    if str(model).lower() == "sir":
+        step_MF = step_MF_sir
+    elif str(model).lower() == "sis":
+        step_MF = step_MF_sis
+    else:
+        raise ValueError("Invalid model, accepted models are 'sir' and 'sis'")
+
+    Y_list = []
+    a_list = []
+
+    eradicated = False
+
+    tt = np.arange(0, t_max+dt, dt)
+
+    Y = np.array([i0, 0]) #initial condition Y[0] = i, Y[1] = r
+    a = 1
+
+    for idx, t in enumerate(tt):
+
+        s = 1 - Y[0] -Y[1]
+
+        for _ in range(a_steps):
+            a = 1 / (1 + s*beta*(alpha/dt)*a*Y[0])
+
+        if Y[0] < zero_tol:
+            # If I = 0 the epidemic is over
+            eradicated = True
+            tt = tt[0:idx]
+            break
+        else:
+            Y_list.append(Y)
+            a_list.append(a)
+
+        Y = step_MF(Y, beta, mu, a)
+
+    Y_array = np.array(Y_list)
+    a_time_series = np.array(a_list)
+
+    time_series = {"s": 1 - Y_array[:,0] - Y_array[:,1],
+                   "i": Y_array[:,0],
+                   "r": Y_array[:,1]
+                  }
+
+    return tt, time_series, a_time_series, eradicated
+
+def step_HMF_sir(Y, beta, mu, a, theta, degrees):
+# Right-hand side of the differential eq. system
+# indexes from 0 to len(degrees)-1 are for i_k,
+# indexes from len(degrees) to 2*len(degrees)-1 to are for r_k
+
+    di = np.array([beta*(1-Y[i]-Y[len(Y)//2+i])*degrees[i]*a[degrees[i]]*theta \
+                   for i in range(0,len(Y)//2)])
+
+    dr = np.array([mu*Y[i] for i in range(0,len(Y)//2)])
+
+    dYdt = np.zeros(len(Y))
+    dYdt[:len(Y)//2]  = +di - dr
+    dYdt[len(Y)//2:]  = +dr
+
+    return Y + dYdt
+
+def step_HMF_sis(Y, beta, mu, a, theta, degrees):
+# Right-hand side of the differential eq. system
+# indexes from 0 to len(degrees)-1 are for i_k,
+# indexes from len(degrees) to 2*len(degrees)-1 to are for r_k
+
+    di = np.array([beta*(1-Y[i]-Y[len(Y)//2+i])*degrees[i]*a[degrees[i]]*theta \
+                   for i in range(0,len(Y)//2)])
+
+    ds = np.array([mu*Y[i] for i in range(0,len(Y)//2)])
+
+    dYdt = np.zeros(len(Y))
+    dYdt[:len(Y)//2]  = +di - ds
+
+    return Y + dYdt
+
+
+def simulate_HMF(model, t_max, beta, mu, alpha, delta, i0, degrees, p, a_steps=10, dt=1, zero_tol=1e-9):
+    """
+    Simulate the heterogeneous mean field model
+
+    Parameters:
+        model: Model to simulate, must be sir or sis
+        t_max: Maximum time
+        beta: Infection rate
+        mu: Recovery rate
+        alpha: Cost of infection
+        delta: Discount factor
+        i0: Initial fraction of infected individuals
+        degrees: Degrees of the individuals
+        p: Probability of each degree
+        a_steps: Number of steps to update social activity
+        dt: Time step
+        zero_tol: Tolerance for zero values
+    """
+    
+    if str(model).lower() == "sir":
+        step_HMF = step_HMF_sir
+    elif str(model).lower() == "sis":
+        step_HMF = step_HMF_sis
+    else:
+        raise ValueError("Invalid model, accepted models are 'sir' and 'sis'")
+
+    Y_list = []
+    a_list = []
+    theta_list = []
+
+    eradicated = False
+
+    tt = np.arange(0, t_max+dt, dt)
+
+    init = np.zeros(2*len(degrees))   # indexes from 0 to len(degrees)-1 are for i_k,
+                                      # indexes from len(degrees) to 2*len(degrees)-1 to are for r_k
+    
+    k_min = min(degrees)
+    k_ave = sum([k*p[k] for k in degrees])
+    beta_HMF = beta/k_ave
+
+    for k in degrees:
+        init[k-k_min] = i0
+
+    Y = np.array([elem for elem in init]) #initial conditions
+
+    theta = sum([(k-1)*p[k]*Y[k-k_min]/k_ave for k in degrees]) # Density of infected neighbours
+    # there is no a[k] in theta because at t=0 a[k] = 1
+
+    a = {}
+    for k in degrees:
+        a[k] = 1
+
+    a_time_series = {}
+    for k in degrees:
+        a_time_series[k] = []
+
+    for idx, t in enumerate(tt):
+
+        if all(Y[0:len(degrees)] < zero_tol):
+            # If I = 0 the epidemic is over
+            eradicated = True
+            tt = tt[0:idx]
+            break
+        else:
+            Y_list.append(Y)
+            theta_list.append(theta)
+            for k in degrees:
+                a_time_series[k].append(a[k])
+    
+        for _ in range(a_steps):
+            for k in degrees:
+                s_k  = 1 - Y[k-k_min] - Y[len(degrees)+k-k_min]
+                a[k] = 1 / (1 + s_k*(alpha/dt)*delta*beta_HMF*k*theta)
+
+            # Theta changes because of changes in a_k
+            theta = sum([a[k]*(k-1)*p[k]*Y[k-k_min]/k_ave for k in degrees])
+
+        Y = step_HMF(Y, beta_HMF, mu, a, theta, degrees) # Advance one time step
+
+        # Theta changes because of changes in i_k
+        theta = sum([a[k]*(k-1)*p[k]*Y[k-k_min]/k_ave for k in degrees])
+
+    for k in degrees:
+        a_time_series[k] = np.array(a_time_series[k])
+
+    Y_array = np.array(Y_list)
+    theta_time_series = np.array(theta_list)
+
+    s_k = 1 - Y_array[:,0:len(degrees)] - Y_array[:,len(degrees):]
+    i_k = Y_array[:,0:len(degrees)]
+    r_k = Y_array[:,len(degrees):]
+
+    s_dict = {}
+    i_dict = {}
+    r_dict = {}
+
+    for k_idx, k in enumerate(degrees):
+        s_dict[k] = s_k[:,k_idx]
+        i_dict[k] = i_k[:,k_idx]
+        r_dict[k] = r_k[:,k_idx]
+
+    time_series = {
+        "s": s_dict,
+        "i": i_dict,
+        "r": r_dict
+    }
+
+    return tt, time_series, a_time_series, theta_time_series, eradicated # heterogeneous
+
+
+# ----- LOCAL AWARENESS -----
 
 def get_prev_i(all_links, i_tuple: tuple, k):
     """
