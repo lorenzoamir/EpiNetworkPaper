@@ -635,7 +635,7 @@ def simulate_sis(G, i0, t_max, beta_default, mu, alpha=0, delta=0.9, seed=42, N_
         
     return tt, result
 
-def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, seed, N_steps):
+def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed, N_steps):
     '''
     Simulate the SIRD model on a network
 
@@ -656,6 +656,8 @@ def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, seed, N_step
         Cost of infection
     delta: float
         Discount factor
+    l_vs_g: float
+        Local vs global awareness, 1 is full local awareness, 0 is full global awareness
     seed: int
         Random seed
     N_steps: int

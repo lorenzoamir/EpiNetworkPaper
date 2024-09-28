@@ -50,14 +50,10 @@ i0 = args.i0 # Initial fraction of infected nodes
 # frac = 10/N # Only keep runs where the disease reaches this fraction of the population
 t_max = round(args.tmax/dt) # Max length of a simulation
 
-# Create matrix "sims_matrix" with N_sims rows and t_max columns,
-# each row represents the time-series of a single simulation
+infected_matrix = np.zeros((N_sims, t_max+1))
+fatality_matrix = np.zeros((N_sims, t_max+1))
 
-sims_matrix = np.zeros((N_sims, t_max+1))
-
-N_keep = 0 # Number of runs in which i is over the threshold
-
-for i, row in enumerate(sims_matrix):
+for i, (row_i, row_d) in enumerate(zip(infected_matrix, fatality_matrix)):
     G = create_random_connected(N, prob, seed=args.seed+i)
 
     tt, result = simulate_sird(
@@ -73,8 +69,8 @@ for i, row in enumerate(sims_matrix):
         N_steps=a_steps
     )
 
-#    if(result["r"][-1] >= frac): # Only keep runs where the desease reaches a significant fraction of the pupulation
-    row[:] = result["d"][:]
+    row_i[:len(result["i"])] = result["i"]
+    row_d[:len(result["d"])] = result["d"]
 
 # Create output directory if it does not exist
 path = os.path.join(args.outdir)
@@ -83,4 +79,5 @@ os.makedirs(path, exist_ok=True)
 if not os.path.exists(path):
     os.makedirs(path)
 
-np.save(os.path.join(path, "fatalities"), sims_matrix)
+np.save(os.path.join(path, "infected"), infected_matrix)
+np.save(os.path.join(path, "fatalities"), fatality_matrix)
