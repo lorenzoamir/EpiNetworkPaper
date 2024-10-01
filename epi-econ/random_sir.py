@@ -81,8 +81,5 @@ r_inf = np.array(r_inf) # From list to np.array
 path = os.path.join(args.outdir, "alpha={}/".format(alpha))
 os.makedirs(path, exist_ok=True)
 
-if not os.path.exists(path):
-    os.makedirs(path)
-
 np.save(path + "simulations", sims_matrix)
 np.save(path + "r_inf", r_inf)

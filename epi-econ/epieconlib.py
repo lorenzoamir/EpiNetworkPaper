@@ -78,6 +78,7 @@ def create_scalefree(N, k_min, k_max, gamma, seed=0):
 def get_activity(k_min, k_max, gamma):
     """
     Function to extact degrees from a power law distribution with exponent gamma
+    THIS IS NOT RELATED TO SOCIAL ACTIVITY!
 
     Parameters:
         k_min: minimum degree
@@ -167,6 +168,7 @@ def simulate_MF(model, t_max, beta, mu, alpha, delta, i0, a_steps=10, dt=1, zero
 
     tt = np.arange(0, t_max+dt, dt)
 
+    # Initial conditions
     Y = np.array([i0, 0]) #initial condition Y[0] = i, Y[1] = r
     a = 1
 
@@ -399,6 +401,10 @@ def get_avg_a(all_links, a, k):
     # sum the social activity of the neighbors for each node
     # the social activity of the neighbors is stored in a_neighs,
     # the number of neighbors is stored in k
+    # To make the computation fast we use np.bincount,
+    # since we are using activity as weights, we are 
+    # just computing the sum of the social activity
+    # of the neighbors of each node
     a_sum = np.bincount(all_links[:,0], weights=a_neighs)
 
     # divide by degree
@@ -487,7 +493,7 @@ def simulate_sir(G, i0, t_max, beta_default, mu, alpha=0, delta=0.9, seed=42, N_
 
         for _ in range(N_steps):
             avg_a = get_avg_a(all_links, a, k) # avg social activity
-            a = 1 / (1 + alpha * delta * beta_default * sigma * prev * avg_a)
+            a = 1 / (1 + alpha * delta * beta * k * sigma * prev * avg_a)
 
         # Remove links in which at least one node is recovered
         active_links = links_no_dupl[~np.isin(links_no_dupl, r_tuple).any(axis=1)]
@@ -586,7 +592,7 @@ def simulate_sis(G, i0, t_max, beta_default, mu, alpha=0, delta=0.9, seed=42, N_
 
         for _ in range(N_steps):
             avg_a = get_avg_a(all_links, a, k) # avg social activity
-            a = 1 / (1 + alpha * delta * beta_default * sigma * prev * avg_a)
+            a = 1 / (1 + alpha * delta * beta * k * sigma * prev * avg_a)
 
         # Remove links in which at least one node is recovered
         active_links = links_no_dupl[~np.isin(links_no_dupl, r_tuple).any(axis=1)]
@@ -635,15 +641,15 @@ def simulate_sis(G, i0, t_max, beta_default, mu, alpha=0, delta=0.9, seed=42, N_
         
     return tt, result
 
-def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed, N_steps):
+def simulate_sird(G, init, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed, N_steps):
     '''
     Simulate the SIRD model on a network
 
     Parameters:
     G: NetworkX graph
         The network on which to simulate the model
-    i0: float
-        Initial fraction of infected nodes
+    init: dict
+        dictionary with the initial fraction of infected individuals, must have keys "s", "i", "r"
     t_max: int
         Maximum time
     beta_default: float
@@ -670,12 +676,16 @@ def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed
     k_ave = 2*len(G.edges)/N
     beta = beta_default/k_ave
 
+    # Initial conditions
+    i0 = init["i"]
+    r0 = init["r"]
+
     # Init all nodes to S
     disease_status=np.array(["s"] * N)
 
     # Select i0*N nodes to be infected
     i_set = set(random.sample(range(0,N), max(1, round(N * i0))))
-    r_set = set()
+    r_set = set(random.sample(range(0,N), max(1, round(N * r0))))
 
     # Init social activity (a) to 1
     a = np.ones(N)
@@ -691,8 +701,7 @@ def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed
     result = {
         "s": [(N - len(i_set)) / N],
         "i": [len(i_set)/N],
-        "r": [0],
-        "d": [0]
+        "r": [len(r_set)/N], # Here we separate r and d, but in the simulation we treat all as r
         }
 
     for t in range(t_max):
@@ -702,13 +711,23 @@ def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed
 
         i_tuple = tuple(i_set)
         r_tuple = tuple(r_set)
-
+        
+        # Local
         prev = get_prev_i(all_links, i_tuple, k) # prevalence
         sigma = get_prev_s(all_links, i_tuple, r_tuple, k) # prob of being S
+        
+        # Global
+        glob_s = result["s"][-1]
+        glob_i = result["i"][-1]
+        glob_a = np.mean(a)
 
         for _ in range(N_steps):
             avg_a = get_avg_a(all_links, a, k) # avg social activity
-            a = 1 / (1 + alpha * delta * beta_default * sigma * prev * avg_a)
+            # Local awareness, use actual node metrics
+            loc = beta * k * sigma * prev * avg_a
+            # Global awareness, use average or global metrics
+            glob = beta * k_ave * glob_s * glob_i * glob_a
+            a = 1 / (1 + alpha * delta * (l_vs_g*loc + (1-l_vs_g)*glob))
 
         # Remove links in which at least one node is recovered
         active_links = links_no_dupl[~np.isin(links_no_dupl, r_tuple).any(axis=1)]
@@ -725,8 +744,6 @@ def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed
 
         # Extract number of recoveries from a binomial distribution
         n_recoveries = np.random.binomial(len(i_set), mu)
-        # Extract number of deaths from a binomial distribution
-        n_deaths = np.random.binomial(n_recoveries, pi)
 
         # Randomly select indices of nodes to recover
         rand = np.random.choice(len(i_set), n_recoveries, replace=False)
@@ -746,17 +763,17 @@ def simulate_sird(G, i0, t_max, beta_default, mu, pi, alpha, delta, l_vs_g, seed
         result["s"].append((N - len(i_set) - len(r_set)) / N)
         result["i"].append(len(i_set) / N)
         result["r"].append(len(r_set) / N)
-        result["d"].append(result["d"][-1] + n_deaths / N)
 
         if len(i_set) == 0:
                 # Repeat the last value of s, i and r until the end if the epidemics ends before tmax
                 result["s"] = np.pad(result["s"], [(0, t_max+1-len(result["s"]))], mode='edge')
                 result["i"] = np.pad(result["i"], [(0, t_max+1-len(result["i"]))], mode='constant') # pad 0
                 result["r"] = np.pad(result["r"], [(0, t_max+1-len(result["r"]))], mode='edge')
-                result["d"] = np.pad(result["d"], [(0, t_max+1-len(result["d"]))], mode='edge')
-
                 break 
-        
+    
+    # Add deaths, (a fraction pi of the recovered)
+    result['d'] = np.array(result['r']) * pi
+
     tt = np.linspace(0, t_max, t_max+1)
         
     return tt, result
