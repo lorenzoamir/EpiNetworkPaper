@@ -14,12 +14,12 @@ def create_random_connected(N, prob, seed=0):
         Number of nodes
     prob: float
     """
-    G = nx.erdos_renyi_graph(N, prob, seed=seed)
+    G = nx.fast_gnp_random_graph(N, prob, seed=seed)
         
     while not nx.is_connected(G):
         # Update seed
         seed += 1
-        G = nx.erdos_renyi_graph(N, prob, seed=seed)
+        G = nx.fast_gnp_random_graph(N, prob, seed=seed)
     return G
 
 def create_scalefree(N, k_min, k_max, gamma, seed=0):

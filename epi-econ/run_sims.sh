@@ -10,7 +10,6 @@ COMPARISON=1
 
 # Parameters
 alphas=(0.00 0.10 0.13 0.17 0.20 0.28 0.37 0.48 0.63 0.81 1.06 1.37 1.79 2.32 3.02 3.92 5.10 6.63 8.61 11 14 19 25 32 42 54 70 91 120 154 200)
-l_vs_g=(0.0 0.05 0.1 0.15 0.2)
 beta=0.3
 mu=0.1
 i0=0.01
@@ -76,8 +75,13 @@ done
 if [ $COMPARISON -eq 1 ]; then
     # Overwrite ninviduals and nsims
     nsims=20 # 1000
-    nindividuals= 100000 # 1e5
-    tmax=111
+    #nindividuals=3280000 # downscale the network to 328e3
+    nindividuals=100000 # downscale the network to 328e3
+    kavg=50 # Default 14.7
+    tmax=112
+
+    #l_vs_g=(0.0 0.20 0.50 1.0)
+    l_vs_g=(0.0 0.20 1)
 
     outputdir="output_prova/comparison"
     echo "Running command: comparison.py"
@@ -87,9 +91,11 @@ if [ $COMPARISON -eq 1 ]; then
     tot=${#l_vs_g[@]}
     for value in "${l_vs_g[@]}"; do
         # Print command and wait
-        echo "python comparison.py --outdir $outputdir --l-vs-g $value --nsims $nsims --tmax $tmax"
+        command="python comparison.py --outdir $outputdir --l-vs-g $value --nsims $nsims --tmax $tmax --nindividuals $nindividuals --kavg $kavg"
+        echo $command
         sleep 1
-        python comparison.py --outdir $outputdir --l-vs-g $value --nsims $nsims --tmax $tmax &
+        # Actually run the command
+        $command &
         echo "Simulations run: $i/$tot"
         i=$((i+1))
     done
